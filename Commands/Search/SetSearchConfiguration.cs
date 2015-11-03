@@ -8,8 +8,8 @@ using Resources = OfficeDevPnP.PowerShell.Commands.Properties.Resources;
 
 namespace OfficeDevPnP.PowerShell.Commands.Search
 {
-    [Cmdlet(VerbsCommon.Set, "SPOSearchConfiguration")]
-    [CmdletHelp("Returns the search configuration",
+    [Cmdlet(VerbsCommon.Set, "SPOSearchConfiguration", DefaultParameterSetName = "SettingsString")]
+    [CmdletHelp("Sets the search configuration",
         Category = CmdletHelpCategory.Search)]
     [CmdletExample(
         Code = @"PS:> Set-SPOSearchConfiguration -Configuration $config",
@@ -23,32 +23,26 @@ namespace OfficeDevPnP.PowerShell.Commands.Search
         Code = @"PS:> Set-SPOSearchConfiguration -Configuration $config -Scope Subscription",
         Remarks = "Sets the search configuration for the current tenant",
         SortOrder = 3)]
-    [CmdletExample(
-          Code = @"PS:> Set-SPOSearchConfiguration -Path searchconfig.xml -Scope Subscription",
-        Remarks = "Reads the search configuratino from the specified XML file and sets it for the current tenant",
-        SortOrder = 4)]
-
     public class SetSearchConfiguration : SPOWebCmdlet
     {
-        [Parameter(Mandatory = true, ParameterSetName = "Config", HelpMessage = "Search configuration string")]
+        [Parameter(Mandatory = true, ParameterSetName = "SettingsString", Position = 0, ValueFromPipelineByPropertyName = true, ValueFromPipeline = true)]
         public string Configuration;
 
-        [Parameter(Mandatory = true, ParameterSetName = "Path", HelpMessage = "Path to a search configuration")]
+        [Parameter(Mandatory = true, ParameterSetName = "SettingsFile", Position = 0, ValueFromPipelineByPropertyName = true, ValueFromPipeline = true, HelpMessage = "Path to the xml file containing the search settinigs.")]
         public string Path;
 
-        [Parameter(Mandatory = false, ParameterSetName = ParameterAttribute.AllParameterSets)]
+        [Parameter(Mandatory = false)]
         public SearchConfigurationScope Scope = SearchConfigurationScope.Web;
 
         protected override void ExecuteCmdlet()
         {
-            if (ParameterSetName == "Path")
+            if (ParameterSetName.Equals("SettingsFile", StringComparison.InvariantCultureIgnoreCase))
             {
-                if (!System.IO.Path.IsPathRooted(Path))
-                {
-                    Path = System.IO.Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, Path);
-                }
+                Path = !System.IO.Path.IsPathRooted(Path) ? System.IO.Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, Path) : Path;
                 Configuration = System.IO.File.ReadAllText(Path);
+
             }
+
             switch (Scope)
             {
                 case SearchConfigurationScope.Web:
@@ -63,12 +57,12 @@ namespace OfficeDevPnP.PowerShell.Commands.Search
                     }
                 case SearchConfigurationScope.Subscription:
                     {
-                        if (!ClientContext.Url.ToLower().Contains("-admin"))
-                        {
-                            throw new InvalidOperationException(Resources.CurrentSiteIsNoTenantAdminSite);
-                        }
-
                         ClientContext.ImportSearchSettings(Configuration, SearchObjectLevel.SPSiteSubscription);
+                        break;
+                    }
+                case SearchConfigurationScope.Ssa:
+                    {
+                        ClientContext.ImportSearchSettings(Configuration, SearchObjectLevel.Ssa);
                         break;
                     }
             }

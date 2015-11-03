@@ -1,10 +1,14 @@
 ﻿using System;
+using System.IO;
 using System.Management.Automation;
+using System.Text;
 using Microsoft.SharePoint.Client;
 using Microsoft.SharePoint.Client.Search.Administration;
 using Microsoft.SharePoint.Client.Search.Portability;
 using OfficeDevPnP.PowerShell.CmdletHelpAttributes;
 using OfficeDevPnP.PowerShell.Commands.Enums;
+using Encoding = System.Text.Encoding;
+using File = System.IO.File;
 using Resources = OfficeDevPnP.PowerShell.Commands.Properties.Resources;
 
 namespace OfficeDevPnP.PowerShell.Commands.Search
@@ -24,63 +28,73 @@ namespace OfficeDevPnP.PowerShell.Commands.Search
         Code = @"PS:> Get-SPOSearchConfiguration -Scope Subscription",
         Remarks = "Returns the search configuration for the current tenant",
         SortOrder = 3)]
-    [CmdletExample(
-        Code = @"PS:> Get-SPOSearchConfiguration -Path searchconfig.xml -Scope Subscription",
-        Remarks = "Returns the search configuration for the current tenant and saves it to the specified file",
-        SortOrder = 4)]
     public class GetSearchConfiguration : SPOWebCmdlet
     {
         [Parameter(Mandatory = false)]
         public SearchConfigurationScope Scope = SearchConfigurationScope.Web;
 
+        [Parameter(Mandatory = false, HelpMessage = "Filename to write to, optionally including full path")]
+        public string Filename;
+
+        [Parameter(Mandatory = false, HelpMessage = "Overwrites the output file if it exists.")]
+        public SwitchParameter Force;
+
         [Parameter(Mandatory = false)]
-        public string Path;
+        public Encoding Encoding = Encoding.Unicode;
 
         protected override void ExecuteCmdlet()
         {
-            string configoutput = string.Empty;
 
+            var xml = String.Empty;
             switch (Scope)
             {
                 case SearchConfigurationScope.Web:
                     {
-                        configoutput = this.SelectedWeb.GetSearchConfiguration();
+                        xml = SelectedWeb.GetSearchConfiguration();
                         break;
                     }
                 case SearchConfigurationScope.Site:
                     {
-                        configoutput = ClientContext.Site.GetSearchConfiguration();
+                        xml = ClientContext.Site.GetSearchConfiguration();
                         break;
                     }
                 case SearchConfigurationScope.Subscription:
                     {
-                        if (!ClientContext.Url.ToLower().Contains("-admin"))
-                        {
-                            throw new InvalidOperationException(Resources.CurrentSiteIsNoTenantAdminSite);
-                        }
-
-                        SearchObjectOwner owningScope = new SearchObjectOwner(ClientContext, SearchObjectLevel.SPSiteSubscription);
-                        var config = new SearchConfigurationPortability(ClientContext);
-                        ClientResult<string> configuration = config.ExportSearchConfiguration(owningScope);
-                        ClientContext.ExecuteQueryRetry(10, 60 * 5 * 1000);
-
-                        configoutput = configuration.Value;
+                        //xml = ClientContext.GetSearchConfiguration(SearchObjectLevel.SPSiteSubscription);
+                        break;
                     }
-                    break;
+                //#if CLIENTSDKV15
+                case SearchConfigurationScope.Ssa:
+                    {
+                        //xml = ClientContext.GetSearchConfiguration(SearchObjectLevel.Ssa);
+                        break;
+                    }
+                    //#endif
             }
 
-            if (Path != null)
+            if (!string.IsNullOrEmpty(Filename))
             {
-                if (!System.IO.Path.IsPathRooted(Path))
+                if (!Path.IsPathRooted(Filename))
                 {
-                    Path = System.IO.Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, Path);
+                    Filename = Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, Filename);
                 }
-                System.IO.File.WriteAllText(Path, configoutput);
+                if (File.Exists(Filename))
+                {
+                    if (Force || ShouldContinue(string.Format(Resources.File0ExistsOverwrite, Filename), Resources.Confirm))
+                    {
+                        File.WriteAllText(Filename, xml, Encoding);
+                    }
+                }
+                else
+                {
+                    File.WriteAllText(Filename, xml, Encoding);
+                }
             }
             else
             {
-                WriteObject(configoutput);
+                WriteObject(xml);
             }
+
         }
     }
 }

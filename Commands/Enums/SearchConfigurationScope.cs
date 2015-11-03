@@ -4,6 +4,7 @@
     {
         Web,
         Site,
-        Subscription
+        Subscription,
+        Ssa,
     }
 }
